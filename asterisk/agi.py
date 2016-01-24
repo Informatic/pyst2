@@ -23,6 +23,7 @@ import sys
 import pprint
 import re
 import signal
+import logging
 
 DEFAULT_TIMEOUT = 2000  # 2sec timeout used as default for functions that take timeouts
 DEFAULT_RECORD = 20000  # 20sec record time
@@ -77,7 +78,7 @@ class AGIUsageError(AGIError):
 class AGIInvalidCommand(AGIError):
     pass
 
-        
+
 class AGI:
     """
     This class encapsulates communication between Asterisk an a python script.
@@ -85,24 +86,20 @@ class AGI:
     Asterisk.
     """
 
-    def __init__(self, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr):
+    def __init__(self, stdin=sys.stdin, stdout=sys.stdout):
         self._got_sighup = False
         signal.signal(signal.SIGHUP, self._handle_sighup)  # handle SIGHUP
-        self.stderr.write('ARGS: ')
-        self.stderr.write(str(sys.argv))
-        self.stderr.write('\n')
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug('ARGS: %r', sys.argv)
         self.stdin = stdin
         self.stdout = stdout
-        self.stderr = stderr
         self.env = {}
         self._get_agi_env()
 
     def _get_agi_env(self):
-        while 1:
+        while True:
             line = self.stdin.readline().strip()
-            self.stderr.write('ENV LINE: ')
-            self.stderr.write(line)
-            self.stderr.write('\n')
+            self.logger.debug('ENV LINE: %s', line)
             if line == '':
                 #blank line signals end
                 break
@@ -111,9 +108,8 @@ class AGI:
             data = data.strip()
             if key != '':
                 self.env[key] = data
-        self.stderr.write('class AGI: self.env = ')
-        self.stderr.write(pprint.pformat(self.env))
-        self.stderr.write('\n')
+
+        self.logger.debug('Env: %r', self.env)
 
     def _quote(self, string):
         """ provides double quotes to string, converts int/bool to string """
@@ -152,16 +148,15 @@ class AGI:
         command = command.strip()
         if command[-1] != '\n':
             command += '\n'
-        self.stderr.write('    COMMAND: %s' % command)
+        self.logger.debug('Command: %r', command)
         self.stdout.write(command)
-        self.stdout.flush()
 
     def get_result(self, stdin=sys.stdin):
         """Read the result of a command from Asterisk"""
         code = 0
         result = {'result': ('', '')}
         line = self.stdin.readline().strip()
-        self.stderr.write('    RESULT_LINE: %s\n' % line)
+        self.logger.debug('Result line: %r', line)
         m = re_code.search(line)
         if m:
             code, response = m.groups()
@@ -177,8 +172,7 @@ class AGI:
 
                 if key == 'result' and value == '-1':
                     raise AGIAppError("Error executing application, or hangup")
-
-            self.stderr.write('    RESULT_DICT: %s\n' % pprint.pformat(result))
+            self.logger.debug('Result dict: %r', result)
             return result
         elif code == 510:
             raise AGIInvalidCommand(response)
